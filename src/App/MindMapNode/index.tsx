@@ -1,6 +1,6 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react';
-import { Handle, NodeProps, Position, NodeResizer, NodeToolbar } from '@xyflow/react';
-import { Trash2, GripVertical } from 'lucide-react';
+import { Handle, NodeProps, Position, NodeResizer, NodeToolbar, useReactFlow } from '@xyflow/react';
+import { Trash2, GripVertical, Plus } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import useStore from '../store';
@@ -23,6 +23,7 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
     takeSnapshot, 
     addComment, 
     deleteComment,
+    addChildNode,
     totalTasks,
     completedTasks
   } = useStore(
@@ -37,11 +38,14 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
         takeSnapshot: state.takeSnapshot,
         addComment: state.addComment,
         deleteComment: state.deleteComment,
+        addChildNode: state.addChildNode,
         totalTasks: tasks.length,
         completedTasks: completed
       };
     })
   );
+
+  const { getNode } = useReactFlow();
 
   const selectedTeam = teams.find((t) => t.id === data.teamId);
 
@@ -89,6 +93,19 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
     if (commentText.trim() === '') return;
     addComment(id, commentAuthor, commentText.trim());
     setCommentText('');
+  };
+
+  const handleAddChild = () => {
+    const parentNode = getNode(id);
+    if (!parentNode) return;
+    
+    // Posiciona o novo nó abaixo do nó pai
+    const childPosition = {
+      x: (parentNode.measured?.width || 120) + 100,
+      y: 0,
+    };
+    
+    addChildNode(parentNode, childPosition);
   };
 
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -150,6 +167,45 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
           </div>
         </div>
       </div>
+
+      {/* ===== BOTÃO ADICIONAR FILHO (Aparece quando selecionado) ===== */}
+      {selected && !isFilteredOut && id !== 'root' && (
+        <button
+          className="add-child-btn nodrag"
+          onClick={handleAddChild}
+          title="Adicionar Sub-Tarefa (Middle Click em qualquer nó)"
+          style={{
+            position: 'absolute',
+            bottom: '-18px',
+            right: '10%',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent-color)',
+            border: '2px solid var(--node-bg)',
+            color: 'white',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20,
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+            transition: 'all 0.2s ease',
+            fontSize: 0,
+            padding: 0,
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.15)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.6)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+          }}
+        >
+          <Plus size={16} />
+        </button>
+      )}
 
       {/* ===== HANDLES: Manter na div principal para auto-layout funcionar ===== */}
       <Handle type="target" position={targetPosition} />

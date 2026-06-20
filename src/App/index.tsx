@@ -203,6 +203,30 @@ function Flow() {
     fitView({ nodes: [{ id: nodeId }], duration: 800, maxZoom: 1.2 });
   }, [selectNode, fitView]);
 
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    // Detecta middle click (botão 1)
+    if (event.button !== 1) return;
+
+    event.preventDefault();
+    
+    const node = (event.target as Element).closest('.react-flow__node');
+    if (!node) return;
+
+    // Obtém o ID do nó do atributo data-id (React Flow adiciona automaticamente)
+    const nodeElement = node as HTMLElement;
+    const nodeId = nodeElement.getAttribute('data-id');
+    if (!nodeId) return;
+
+    const { nodeLookup } = store.getState();
+    const parentNode = nodeLookup.get(nodeId);
+    if (!parentNode) return;
+
+    const childPosition = getChildNodePosition(event.nativeEvent as MouseEvent, parentNode);
+    if (!childPosition) return;
+
+    addChildNode(parentNode, childPosition);
+  }, [getChildNodePosition, addChildNode]);
+
   const getChildNodePosition = (
     event: MouseEvent | TouchEvent,
     parentNode?: InternalNode
@@ -271,6 +295,7 @@ function Flow() {
       onEdgesChange={onEdgesChange}
       onConnectStart={onConnectStart}
       onConnectEnd={onConnectEnd}
+      onMouseDown={handleMouseDown}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       nodeOrigin={nodeOrigin}
