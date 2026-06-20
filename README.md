@@ -93,6 +93,10 @@ Contribuições são o que fazem a comunidade open source um lugar incrível par
 4. Faça o Push para a Branch (`git push origin feature/NovaFuncionalidade`)
 5. Abra um Pull Request
 
+## 🙏 Agradecimentos e Créditos
+
+Este projeto teve como base estrutural inicial o excelente repositório **[React Flow Mindmap App](https://github.com/xyflow/react-flow-mindmap-app)** criado pela equipe do xyflow. A partir dessa base incrível, adicionamos toda a arquitetura de gestão de projetos acadêmicos, incluindo a gestão de equipes, dashboard de progresso, sistema de comentários integrados, filtros globais, exportação e armazenamento persistente.
+
 ## 📝 Licença
 
 Distribuído sob a licença MIT. Veja `LICENSE` para mais informações.
