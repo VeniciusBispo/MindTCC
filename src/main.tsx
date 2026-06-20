@@ -15,3 +15,12 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </ReactFlowProvider>
   </React.StrictMode>
 );
+
+// Remove phantom service workers from localhost that cause PWA/Manifest 404 syntax errors
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
+  }).catch((err) => console.log('Service Worker unregistration failed: ', err));
+}
