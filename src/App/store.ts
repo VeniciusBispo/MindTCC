@@ -108,8 +108,11 @@ const getCentralTrunkLayout = (nodes: MindMapNode[], edges: Edge[]) => {
   
   const rootIndex = layoutedNodes.findIndex(n => n.id === 'root');
   if (rootIndex !== -1) {
-    const rootWidth = layoutedNodes[rootIndex].measured?.width ?? 200;
-    layoutedNodes[rootIndex].position = { x: -rootWidth / 2, y: 0 };
+    // 1. Centralização Absoluta do Nó Raiz
+    // O NodeOrigin é [0.5, 0.5], portanto a posição { x: 0, y: 0 } 
+    // garante o nó exatamente no centro geométrico do layout.
+    layoutedNodes[rootIndex].position = { x: 0, y: 0 };
+    // O nó raiz usará os valores padrão/implícitos para emitir as linhas
   }
 
   const adjList: Record<string, string[]> = {};
@@ -128,14 +131,28 @@ const getCentralTrunkLayout = (nodes: MindMapNode[], edges: Edge[]) => {
     const nodeIndex = layoutedNodes.findIndex(n => n.id === nodeId);
     if (nodeIndex === -1) return;
 
-    const width = layoutedNodes[nodeIndex].measured?.width ?? 250;
-    const xDist = 350; 
+    // 3. Espaçamento Horizontal (X-Gap) Generoso
+    // Aumentado para 400px para permitir que o smoothstep tenha bastante espaço para curva
+    const xDist = 400; 
+    
+    // Calcula a posição no eixo X: Negativo para a esquerda, Positivo para a direita
     const xPos = isLeft ? -(depth * xDist) : (depth * xDist);
     
-    layoutedNodes[nodeIndex].position = { x: xPos - width / 2, y: yOffset };
+    layoutedNodes[nodeIndex].position = { x: xPos, y: yOffset };
+
+    // 2. Handles Dinâmicos (A Chave para Linhas Limpas)
+    // Atualiza explicitamente onde a linha entra e sai de cada nó filho
+    if (isLeft) {
+      layoutedNodes[nodeIndex].targetPosition = 'right' as any;
+      layoutedNodes[nodeIndex].sourcePosition = 'left' as any;
+    } else {
+      layoutedNodes[nodeIndex].targetPosition = 'left' as any;
+      layoutedNodes[nodeIndex].sourcePosition = 'right' as any;
+    }
 
     const children = adjList[nodeId] || [];
     children.forEach((childId, idx) => {
+      // Offset no Y para evitar sobreposição de nós
       positionBranch(childId, isLeft, depth + 1, yOffset + (idx * 160));
     });
   };
@@ -264,22 +281,41 @@ const useStore = create<RFState>()(
         if (!targetNode) return;
 
         // Se a alteração for de equipe, responsável ou status (seletores discretos), grava snapshot de histórico antes
-        const isStructuralSelectChange = ('teamId' in data && data.teamId !== targetNode.data.teamId) ||
-                                       ('assignee' in data && data.assignee !== targetNode.data.assignee);
+        const isTeamChange = 'teamId' in data && data.teamId !== targetNode.data.teamId;
+        const isStructuralSelectChange = isTeamChange || ('assignee' in data && data.assignee !== targetNode.data.assignee);
         const isStatusChange = ('status' in data && data.status !== targetNode.data.status);
         
         if (isStructuralSelectChange || isStatusChange) {
           get().takeSnapshot();
         }
 
+        // Obtém todos os descendentes para a herança em cascata (Cascading Update) se a equipe mudar
+        let affectedIds = [nodeId];
+        if (isTeamChange) {
+          const descendants = getDescendants(nodeId, get().edges);
+          affectedIds = [nodeId, ...descendants];
+        }
+
         const nextNodes = get().nodes.map((node) => {
+          // Atualiza o nó alvo que o usuário modificou diretamente
           if (node.id === nodeId) {
             const newData = { ...node.data, ...data };
-            if ('teamId' in data && data.teamId !== node.data.teamId) {
-              newData.assignee = '';
-            }
+            if (isTeamChange) newData.assignee = '';
             return { ...node, data: newData };
           }
+          
+          // Herança em cascata: atualiza a equipe de todos os descendentes (filhos, netos, etc)
+          if (isTeamChange && affectedIds.includes(node.id)) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                teamId: data.teamId,
+                assignee: '', // Reseta o responsável pois a equipe mudou
+              }
+            };
+          }
+
           return node;
         });
 

@@ -23,6 +23,8 @@ export type LogEntry = {
 
 export type TaskStatus = 'Pendente' | 'Em Andamento' | 'Concluído';
 
+export type NodeShape = 'retangulo' | 'arredondado' | 'circulo' | 'losango';
+
 export type NodeData = {
   label: string;
   teamId?: string;
@@ -31,6 +33,7 @@ export type NodeData = {
   collapsed?: boolean;
   comments?: Comment[];
   status?: TaskStatus;
+  shape?: NodeShape;
 };
 
 export type MindMapNode = Node<NodeData, 'mindmap'>;

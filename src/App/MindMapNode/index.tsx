@@ -1,12 +1,12 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react';
-import { Handle, NodeProps, Position } from '@xyflow/react';
-import { Trash2, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { Handle, NodeProps, Position, NodeResizer, NodeToolbar } from '@xyflow/react';
+import { Trash2, GripVertical } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import useStore from '../store';
-import { type MindMapNode as MindMapNodeType } from '../types';
+import { type MindMapNode as MindMapNodeType, type NodeShape } from '../types';
 
-function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
+function MindMapNode({ id, data, selected, targetPosition = Position.Top, sourcePosition = Position.Bottom }: NodeProps<MindMapNodeType>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -93,10 +93,23 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
 
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+  const shapeClass = data.shape ? `shape-${data.shape}` : 'shape-arredondado';
+
   return (
     <>
+      <NodeResizer 
+        minWidth={120} 
+        minHeight={60} 
+        isVisible={selected} 
+        lineClassName="border-blue-400" 
+        handleClassName="h-3 w-3 bg-white border-2 border-blue-400 rounded"
+        onResizeStart={() => {}}
+        onResizeEnd={() => {}}
+      />
+      
+      {/* ===== FORMA GEOMÉTRICA PRINCIPAL (100% arrastável) ===== */}
       <div 
-        className="node-container"
+        className={`node-container ${shapeClass}`}
         style={{
           borderColor: borderStyle,
           boxShadow: glowStyle,
@@ -105,14 +118,14 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
         }}
       >
         <div className="node-header">
-          <div className="drag-handle custom-drag-handle" style={{ cursor: 'grab', padding: '0 4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }} title="Mover Tarefa">
+          <div className="drag-handle" title="Mover Tarefa">
             <GripVertical size={14} />
           </div>
           <div className="inputWrapper">
             <input
               value={data.label}
               onChange={(evt) => updateNodeData(id, { label: evt.target.value })}
-              onFocus={takeSnapshot} // Captura o estado original pré-edição no foco
+              onFocus={takeSnapshot}
               className="input nodrag"
               ref={inputRef}
               placeholder="Nova Tarefa"
@@ -121,38 +134,92 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
           
           <div className="node-actions">
             {id === 'root' ? (
-              <div className="root-progress-badge nodrag" title="Progresso de Conclusão do TCC">
+              <div className="root-progress-badge nodrag" title="Progresso de Conclusão do TCC" style={{ 
+                fontSize: '11px', 
+                fontWeight: 600, 
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap'
+              }}>
                 {completionPercentage}%
               </div>
             ) : (
-              <button className="node-action-btn danger nodrag" onClick={() => deleteNode(id)} title="Deletar Tarefa">
+              <button className="node-action-btn danger nodrag" onClick={() => deleteNode(id)} title="Deletar Tarefa" style={{ pointerEvents: 'auto' }}>
                 <Trash2 size={14} />
               </button>
             )}
           </div>
         </div>
+      </div>
 
-        {isExpanded && id !== 'root' && (
-          <div className="node-details">
-            <div className="detail-row">
-              <span className="detail-label">Status:</span>
+      {/* ===== HANDLES: Manter na div principal para auto-layout funcionar ===== */}
+      <Handle type="target" position={targetPosition} />
+      <Handle 
+        type="source" 
+        position={sourcePosition} 
+        isConnectable={!isExpanded} 
+        style={isExpanded ? { opacity: 0, pointerEvents: 'none' } : undefined}
+      />
+
+      {/* ===== NODE TOOLBAR: Controles complexos (com nodrag/nowheel) ===== */}
+      <NodeToolbar position={Position.Right} isVisible={selected && !isFilteredOut}>
+        <div className="toolbar-panel nodrag nowheel" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          padding: '12px',
+          backgroundColor: 'var(--node-bg)',
+          border: `2px solid ${borderStyle}`,
+          borderRadius: '8px',
+          boxShadow: glowStyle,
+          fontSize: '13px',
+          minWidth: '200px',
+          maxWidth: '280px',
+        }}>
+          
+          {/* Status */}
+          {id !== 'root' && (
+            <div className="toolbar-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="detail-label" style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Status</span>
               <select
                 className={`detail-select status-select status-${(data.status || 'Pendente').replace(/\s/g, '')} nodrag`}
                 value={data.status || 'Pendente'}
                 onChange={(e) => updateNodeData(id, { status: e.target.value as any })}
+                style={{ padding: '6px', borderRadius: '4px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--input-bg)' }}
               >
                 <option value="Pendente">⏳ Pendente</option>
                 <option value="Em Andamento">🚀 Em Andamento</option>
                 <option value="Concluído">✅ Concluído</option>
               </select>
             </div>
+          )}
 
-            <div className="detail-row">
-              <span className="detail-label">Equipe:</span>
+          {/* Formato */}
+          {id !== 'root' && (
+            <div className="toolbar-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="detail-label" style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Formato</span>
+              <select
+                className="detail-select nodrag"
+                value={data.shape || 'arredondado'}
+                onChange={(e) => updateNodeData(id, { shape: e.target.value as NodeShape })}
+                style={{ padding: '6px', borderRadius: '4px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--input-bg)' }}
+              >
+                <option value="retangulo">Retângulo</option>
+                <option value="arredondado">Arredondado</option>
+                <option value="circulo">Círculo</option>
+                <option value="losango">Losango</option>
+              </select>
+            </div>
+          )}
+
+          {/* Equipe */}
+          {id !== 'root' && (
+            <div className="toolbar-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="detail-label" style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Equipe</span>
               <select
                 className="detail-select nodrag"
                 value={data.teamId || ''}
                 onChange={(e) => updateNodeData(id, { teamId: e.target.value })}
+                style={{ padding: '6px', borderRadius: '4px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--input-bg)' }}
               >
                 <option value="">Nenhuma</option>
                 {teams.map((t) => (
@@ -162,14 +229,18 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
                 ))}
               </select>
             </div>
-            
-            <div className="detail-row">
-              <span className="detail-label">Resp:</span>
+          )}
+
+          {/* Responsável */}
+          {id !== 'root' && (
+            <div className="toolbar-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="detail-label" style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Responsável</span>
               <select
                 className="detail-select nodrag"
                 value={data.assignee || ''}
                 onChange={(e) => updateNodeData(id, { assignee: e.target.value })}
                 disabled={!selectedTeam || selectedTeam.members.length === 0}
+                style={{ padding: '6px', borderRadius: '4px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--input-bg)' }}
               >
                 <option value="">Não Atribuído</option>
                 {selectedTeam?.members.map((member) => (
@@ -179,39 +250,76 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
                 ))}
               </select>
             </div>
+          )}
 
-            <div className="detail-row" style={{ marginTop: '4px', flexDirection: 'column', alignItems: 'stretch' }}>
-              <span className="detail-label" style={{ marginBottom: '4px' }}>Detalhes:</span>
+          {/* Detalhes */}
+          {id !== 'root' && (
+            <div className="toolbar-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="detail-label" style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Detalhes</span>
               <textarea
                 className="detail-textarea nodrag nowheel"
                 value={data.details || ''}
                 onChange={(e) => updateNodeData(id, { details: e.target.value })}
-                onFocus={takeSnapshot} // Captura o estado original pré-edição no foco
+                onFocus={takeSnapshot}
                 placeholder="Descreva a tarefa..."
                 rows={2}
+                style={{ padding: '6px', borderRadius: '4px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--input-bg)', resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
+          )}
 
-            {/* Seção de Comentários */}
-            <div className="comments-section nodrag">
+          {/* Comentários */}
+          {id !== 'root' && (
+            <div className="toolbar-row comments-section nodrag">
               <button 
                 type="button"
                 className="comments-toggle-btn nodrag"
                 onClick={() => setIsCommentsExpanded(!isCommentsExpanded)}
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '100%',
+                  padding: '6px 8px',
+                  backgroundColor: 'var(--input-bg)',
+                  border: `1px solid ${borderStyle}`,
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: 'var(--text-primary)'
+                }}
               >
                 <span>💬 {data.comments?.length || 0} {data.comments?.length === 1 ? 'comentário' : 'comentários'}</span>
                 <span>{isCommentsExpanded ? '▲' : '▼'}</span>
               </button>
 
               {isCommentsExpanded && (
-                <div className="comments-box nodrag">
+                <div className="comments-box nodrag" style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '8px',
+                  marginTop: '8px',
+                  padding: '8px',
+                  backgroundColor: 'var(--input-bg)',
+                  border: `1px solid ${borderStyle}`,
+                  borderRadius: '4px',
+                  maxHeight: '200px',
+                  overflowY: 'auto'
+                }}>
                   {data.comments && data.comments.length > 0 && (
-                    <div className="comments-list nowheel">
+                    <div className="comments-list nowheel" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {data.comments.map((c) => (
-                        <div key={c.id} className="comment-item">
-                          <div className="comment-meta">
-                            <span className="comment-author">{c.author}</span>
-                            <span className="comment-date">
+                        <div key={c.id} className="comment-item" style={{
+                          padding: '6px',
+                          backgroundColor: 'var(--node-bg)',
+                          border: `1px solid ${borderStyle}20`,
+                          borderRadius: '3px',
+                          fontSize: '11px'
+                        }}>
+                          <div className="comment-meta" style={{ display: 'flex', gap: '4px', marginBottom: '4px', fontSize: '10px' }}>
+                            <span className="comment-author" style={{ fontWeight: 600, color: borderStyle }}>{c.author}</span>
+                            <span className="comment-date" style={{ color: 'var(--text-secondary)' }}>
                               {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             <button 
@@ -219,60 +327,63 @@ function MindMapNode({ id, data, selected }: NodeProps<MindMapNodeType>) {
                               className="comment-delete-btn" 
                               onClick={() => deleteComment(id, c.id)}
                               title="Remover Comentário"
+                              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0 }}
                             >
                               ×
                             </button>
                           </div>
-                          <p className="comment-text">{c.text}</p>
+                          <p className="comment-text" style={{ margin: 0, lineHeight: 1.3, color: 'var(--text-primary)' }}>{c.text}</p>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <form onSubmit={handleAddComment} className="comment-form">
-                    <div className="comment-form-row">
-                      <select
-                        className="comment-author-select"
-                        value={commentAuthor}
-                        onChange={(e) => setCommentAuthor(e.target.value)}
-                      >
-                        <option value="Visitante">Visitante</option>
-                        {allProjectMembers.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        className="comment-input"
-                        placeholder="Adicionar..."
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                      />
-                      <button type="submit" className="comment-submit-btn" disabled={!commentText.trim()}>
-                        Postar
-                      </button>
-                    </div>
+                  <form onSubmit={handleAddComment} className="comment-form" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <select
+                      className="comment-author-select nodrag"
+                      value={commentAuthor}
+                      onChange={(e) => setCommentAuthor(e.target.value)}
+                      style={{ padding: '4px', borderRadius: '3px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--node-bg)', fontSize: '11px' }}
+                    >
+                      <option value="Visitante">Visitante</option>
+                      {allProjectMembers.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      className="comment-input nodrag"
+                      placeholder="Adicionar..."
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      style={{ padding: '4px', borderRadius: '3px', border: `1px solid ${borderStyle}`, backgroundColor: 'var(--node-bg)', fontSize: '11px' }}
+                    />
+                    <button 
+                      type="submit" 
+                      className="comment-submit-btn nodrag" 
+                      disabled={!commentText.trim()}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        border: 'none',
+                        backgroundColor: commentText.trim() ? borderStyle : 'var(--text-secondary)',
+                        color: 'white',
+                        cursor: commentText.trim() ? 'pointer' : 'not-allowed',
+                        fontSize: '11px',
+                        fontWeight: 500
+                      }}
+                    >
+                      Postar
+                    </button>
                   </form>
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        <button className="node-collapse-btn nodrag" onClick={() => setIsExpanded(!isExpanded)} title="Detalhes da Tarefa">
-          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
-      </div>
-
-      <Handle type="target" position={Position.Top} />
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
-        isConnectable={!isExpanded} 
-        style={isExpanded ? { opacity: 0, pointerEvents: 'none' } : undefined}
-      />
+          )}
+        </div>
+      </NodeToolbar>
     </>
   );
 }
