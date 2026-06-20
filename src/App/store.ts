@@ -108,11 +108,7 @@ const getCentralTrunkLayout = (nodes: MindMapNode[], edges: Edge[]) => {
   
   const rootIndex = layoutedNodes.findIndex(n => n.id === 'root');
   if (rootIndex !== -1) {
-    // 1. Centralização Absoluta do Nó Raiz
-    // O NodeOrigin é [0.5, 0.5], portanto a posição { x: 0, y: 0 } 
-    // garante o nó exatamente no centro geométrico do layout.
     layoutedNodes[rootIndex].position = { x: 0, y: 0 };
-    // O nó raiz usará os valores padrão/implícitos para emitir as linhas
   }
 
   const adjList: Record<string, string[]> = {};
@@ -123,25 +119,61 @@ const getCentralTrunkLayout = (nodes: MindMapNode[], edges: Edge[]) => {
 
   const rootId = 'root';
   const rootChildren = adjList[rootId] || [];
+
+  // Calcula a altura de cada branch para melhor distribuição
+  const calculateBranchHeight = (nodeId: string, adjList: Record<string, string[]>): number => {
+    const children = adjList[nodeId] || [];
+    if (children.length === 0) return 1;
+    
+    const childHeights = children.map(child => calculateBranchHeight(child, adjList));
+    return childHeights.reduce((a, b) => a + b, 0);
+  };
+
+  // Calcula altura total para cada branch raiz
+  const branchHeights = rootChildren.map(childId => calculateBranchHeight(childId, adjList));
   
-  let leftCount = 0;
-  let rightCount = 0;
+  // Espaçamento vertical dinâmico baseado na altura do branch
+  const verticalSpacing = 120;
+  
+  let leftBranches: { id: string; height: number; yStart: number }[] = [];
+  let rightBranches: { id: string; height: number; yStart: number }[] = [];
+  
+  let leftYAccum = 0;
+  let rightYAccum = 0;
+
+  // Alterna branches entre esquerda e direita, distribuindo equilibradamente
+  rootChildren.forEach((childId, idx) => {
+    const branchHeight = branchHeights[idx];
+    const totalBranchSpace = branchHeight * verticalSpacing;
+    
+    if (idx % 2 === 0) {
+      leftBranches.push({ id: childId, height: branchHeight, yStart: -leftYAccum });
+      leftYAccum += totalBranchSpace;
+    } else {
+      rightBranches.push({ id: childId, height: branchHeight, yStart: -rightYAccum });
+      rightYAccum += totalBranchSpace;
+    }
+  });
+
+  // Centraliza branches de forma simétrica
+  const totalLeftSpace = leftYAccum;
+  const totalRightSpace = rightYAccum;
+  const maxSpace = Math.max(totalLeftSpace, totalRightSpace);
+  
+  const leftOffset = (maxSpace - totalLeftSpace) / 2;
+  const rightOffset = (maxSpace - totalRightSpace) / 2;
 
   const positionBranch = (nodeId: string, isLeft: boolean, depth: number, yOffset: number) => {
     const nodeIndex = layoutedNodes.findIndex(n => n.id === nodeId);
     if (nodeIndex === -1) return;
 
-    // 3. Espaçamento Horizontal (X-Gap) Generoso
-    // Aumentado para 400px para permitir que o smoothstep tenha bastante espaço para curva
-    const xDist = 400; 
-    
-    // Calcula a posição no eixo X: Negativo para a esquerda, Positivo para a direita
+    // Espaçamento horizontal aumentado para melhor visualização
+    const xDist = 420;
     const xPos = isLeft ? -(depth * xDist) : (depth * xDist);
     
     layoutedNodes[nodeIndex].position = { x: xPos, y: yOffset };
 
-    // 2. Handles Dinâmicos (A Chave para Linhas Limpas)
-    // Atualiza explicitamente onde a linha entra e sai de cada nó filho
+    // Handles dinâmicos para linhas limpas
     if (isLeft) {
       layoutedNodes[nodeIndex].targetPosition = 'right' as any;
       layoutedNodes[nodeIndex].sourcePosition = 'left' as any;
@@ -151,21 +183,29 @@ const getCentralTrunkLayout = (nodes: MindMapNode[], edges: Edge[]) => {
     }
 
     const children = adjList[nodeId] || [];
+    const childHeights = children.map(childId => calculateBranchHeight(childId, adjList));
+    const totalChildSpace = childHeights.reduce((a, b) => a + b, 0) * verticalSpacing;
+    const startYOffset = yOffset - (totalChildSpace / 2) + (verticalSpacing / 2);
+
+    let childYAccum = 0;
     children.forEach((childId, idx) => {
-      // Offset no Y para evitar sobreposição de nós
-      positionBranch(childId, isLeft, depth + 1, yOffset + (idx * 160));
+      const childHeight = childHeights[idx];
+      const childSpace = childHeight * verticalSpacing;
+      const childYPos = startYOffset + childYAccum + (childSpace / 2) - (verticalSpacing / 2);
+      
+      positionBranch(childId, isLeft, depth + 1, childYPos);
+      childYAccum += childSpace;
     });
   };
 
-  rootChildren.forEach((childId, idx) => {
-    const isLeft = idx % 2 === 0;
-    if (isLeft) {
-      positionBranch(childId, true, 1, 160 * leftCount);
-      leftCount++;
-    } else {
-      positionBranch(childId, false, 1, 160 * rightCount);
-      rightCount++;
-    }
+  // Posiciona branches esquerdo
+  leftBranches.forEach(branch => {
+    positionBranch(branch.id, true, 1, branch.yStart + leftOffset);
+  });
+
+  // Posiciona branches direito
+  rightBranches.forEach(branch => {
+    positionBranch(branch.id, false, 1, branch.yStart + rightOffset);
   });
 
   return { nodes: layoutedNodes, edges };
