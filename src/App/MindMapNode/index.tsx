@@ -1,5 +1,5 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react';
-import { Handle, NodeProps, Position, NodeResizer, NodeToolbar, useReactFlow } from '@xyflow/react';
+import { Handle, NodeProps, Position, NodeResizer, NodeToolbar } from '@xyflow/react';
 import { Trash2, GripVertical, Plus } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -23,7 +23,7 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
     takeSnapshot, 
     addComment, 
     deleteComment,
-    addChildNode,
+    addChildNodeById,
     totalTasks,
     completedTasks
   } = useStore(
@@ -38,14 +38,12 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
         takeSnapshot: state.takeSnapshot,
         addComment: state.addComment,
         deleteComment: state.deleteComment,
-        addChildNode: state.addChildNode,
+        addChildNodeById: state.addChildNodeById,
         totalTasks: tasks.length,
         completedTasks: completed
       };
     })
   );
-
-  const { getNode } = useReactFlow();
 
   const selectedTeam = teams.find((t) => t.id === data.teamId);
 
@@ -96,16 +94,13 @@ function MindMapNode({ id, data, selected, targetPosition = Position.Top, source
   };
 
   const handleAddChild = () => {
-    const parentNode = getNode(id);
-    if (!parentNode) return;
-    
     // Posiciona o novo nó abaixo do nó pai
     const childPosition = {
-      x: (parentNode.measured?.width || 120) + 100,
-      y: 0,
+      x: 100,
+      y: 100,
     };
     
-    addChildNode(parentNode, childPosition);
+    addChildNodeById(id, childPosition);
   };
 
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;

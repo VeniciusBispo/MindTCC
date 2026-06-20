@@ -30,6 +30,7 @@ import FilterPanel from './FilterPanel';
 import HistoryPanel from './HistoryPanel';
 import DashboardPanel from './DashboardPanel';
 import SearchModal from './SearchModal';
+import TutorialPanel from './TutorialPanel';
 
 // we need to import the React Flow styles to make it work
 import '@xyflow/react/dist/style.css';
@@ -40,7 +41,7 @@ const selector = (state: RFState) => ({
   teams: state.teams,
   onNodesChange: state.onNodesChange,
   onEdgesChange: state.onEdgesChange,
-  addChildNode: state.addChildNode,
+  addChildNodeById: state.addChildNodeById,
   resetMap: state.resetMap,
   organizeLayout: state.organizeLayout,
   undo: state.undo,
@@ -70,7 +71,7 @@ function Flow() {
     teams, 
     onNodesChange, 
     onEdgesChange, 
-    addChildNode, 
+    addChildNodeById, 
     resetMap, 
     organizeLayout,
     undo,
@@ -203,16 +204,39 @@ function Flow() {
     fitView({ nodes: [{ id: nodeId }], duration: 800, maxZoom: 1.2 });
   }, [selectNode, fitView]);
 
-  const handleMouseDown = useCallback((event: React.MouseEvent) => {
-    // Detecta middle click (botão 1)
-    if (event.button !== 1) return;
+  const getChildNodePosition = (
+    event: MouseEvent | TouchEvent,
+    parentNode?: InternalNode
+  ) => {
+    const { domNode } = store.getState();
 
+    if (
+      !domNode ||
+      !parentNode?.internals.positionAbsolute ||
+      !parentNode?.measured.width ||
+      !parentNode?.measured.height
+    ) {
+      return;
+    }
+
+    const panePosition = screenToFlowPosition({
+      x: 'clientX' in event ? event.clientX : event.touches[0].clientX,
+      y: 'clientY' in event ? event.clientY : event.touches[0].clientY,
+    });
+
+    return {
+      x: panePosition.x - parentNode.internals.positionAbsolute.x,
+      y: panePosition.y - parentNode.internals.positionAbsolute.y,
+    };
+  };
+
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (event.button !== 1) return;
     event.preventDefault();
     
     const node = (event.target as Element).closest('.react-flow__node');
     if (!node) return;
 
-    // Obtém o ID do nó do atributo data-id (React Flow adiciona automaticamente)
     const nodeElement = node as HTMLElement;
     const nodeId = nodeElement.getAttribute('data-id');
     if (!nodeId) return;
@@ -224,38 +248,8 @@ function Flow() {
     const childPosition = getChildNodePosition(event.nativeEvent as MouseEvent, parentNode);
     if (!childPosition) return;
 
-    addChildNode(parentNode, childPosition);
-  }, [getChildNodePosition, addChildNode]);
-
-  const getChildNodePosition = (
-    event: MouseEvent | TouchEvent,
-    parentNode?: InternalNode
-  ) => {
-    const { domNode } = store.getState();
-
-    if (
-      !domNode ||
-      // we need to check if these properites exist, because when a node is not initialized yet,
-      // it doesn't have a positionAbsolute nor a width or height
-      !parentNode?.internals.positionAbsolute ||
-      !parentNode?.measured.width ||
-      !parentNode?.measured.height
-    ) {
-      return;
-    }
-
-    // we need to remove the wrapper bounds, in order to get the correct mouse position
-    const panePosition = screenToFlowPosition({
-      x: 'clientX' in event ? event.clientX : event.touches[0].clientX,
-      y: 'clientY' in event ? event.clientY : event.touches[0].clientY,
-    });
-
-    // we are calculating with positionAbsolute here because child nodes are positioned relative to their parent
-    return {
-      x: panePosition.x - parentNode.internals.positionAbsolute.x,
-      y: panePosition.y - parentNode.internals.positionAbsolute.y,
-    };
-  };
+    addChildNodeById(nodeId, childPosition);
+  }, [screenToFlowPosition, addChildNodeById]);
 
   const onConnectStart: OnConnectStart = useCallback((_, { nodeId }) => {
     // we need to remember where the connection started so we can add the new node to the correct parent on connect end
@@ -279,12 +273,12 @@ function Flow() {
           const childNodePosition = getChildNodePosition(event, parentNode);
 
           if (childNodePosition) {
-            addChildNode(parentNode, childNodePosition);
+            addChildNodeById(parentNode.id, childNodePosition);
           }
         }
       }
     },
-    [getChildNodePosition]
+    [getChildNodePosition, addChildNodeById]
   );
 
   return (
@@ -309,10 +303,20 @@ function Flow() {
       <MiniMap 
         nodeColor={(n) => {
           const team = teams.find(t => t.id === n.data?.teamId);
-          return team ? team.colorHex : 'rgba(255, 255, 255, 0.2)';
+          return team ? team.colorHex : 'rgba(255, 255, 255, 0.3)';
         }}
-        maskColor="rgba(15, 23, 42, 0.7)"
-        style={{ backgroundColor: 'var(--bg-gradient-end)', borderRadius: '8px' }}
+        nodeStrokeColor={(n) => {
+          const team = teams.find(t => t.id === n.data?.teamId);
+          return team ? team.colorHex : 'rgba(255, 255, 255, 0.5)';
+        }}
+        nodeBorderRadius={8}
+        maskColor="rgba(15, 23, 42, 0.8)"
+        style={{
+          backgroundColor: 'var(--bg-gradient-end)',
+          borderRadius: '8px',
+          border: '1px solid var(--node-border)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+        }}
       />
       <Controls showInteractive={false} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }} />
       
@@ -377,6 +381,7 @@ function Flow() {
       {showHistory && <HistoryPanel onClose={() => setShowHistory(false)} />}
       {showDashboard && <DashboardPanel onClose={() => setShowDashboard(false)} />}
       <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} onSelectNode={handleSelectNode} />
+      <TutorialPanel />
     </ReactFlow>
   );
 }

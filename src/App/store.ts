@@ -49,6 +49,7 @@ export type RFState = {
   // Ações de Nó
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   addChildNode: (parentNode: InternalNode, position: XYPosition) => void;
+  addChildNodeById: (parentNodeId: string, position: XYPosition) => void;
   deleteNode: (nodeId: string) => void;
   toggleCollapse: (nodeId: string) => void;
   resetMap: () => void;
@@ -408,7 +409,7 @@ const useStore = create<RFState>()(
         const newNode: MindMapNode = {
           id: nanoid(),
           type: 'mindmap',
-          data: { label: 'Nova Tarefa', comments: [], status: 'Pendente' }, // Inicializado com status 'Pendente'
+          data: { label: 'Nova Tarefa', comments: [], status: 'Pendente' },
           position,
           dragHandle: '.node-header',
           parentId: parentNode.id,
@@ -426,6 +427,50 @@ const useStore = create<RFState>()(
         const nextEdges = [...get().edges, newEdge];
 
         const parentNodeObj = get().nodes.find(n => n.id === parentNode.id);
+        const parentName = parentNodeObj?.data.label || 'Tarefa';
+
+        const newLog: LogEntry = {
+          id: nanoid(),
+          timestamp: new Date().toISOString(),
+          action: 'Tarefa Criada',
+          details: `Tarefa '${newNode.data.label}' criada como sub-tarefa de '${parentName}'`,
+        };
+
+        set({
+          nodes: nextNodes,
+          edges: nextEdges,
+          projects: get().projects.map((p) =>
+            p.id === get().currentProjectId
+              ? { ...p, nodes: nextNodes, edges: nextEdges, activityLog: [newLog, ...(p.activityLog || [])] }
+              : p
+          ),
+        });
+      },
+
+      addChildNodeById: (parentNodeId: string, position: XYPosition) => {
+        get().takeSnapshot();
+
+        const newNode: MindMapNode = {
+          id: nanoid(),
+          type: 'mindmap',
+          data: { label: 'Nova Tarefa', comments: [], status: 'Pendente' },
+          position,
+          dragHandle: '.node-header',
+          parentId: parentNodeId,
+        };
+
+        const newEdge: Edge = {
+          id: nanoid(),
+          source: parentNodeId,
+          target: newNode.id,
+          type: 'mindmap',
+          animated: true,
+        };
+
+        const nextNodes = [...get().nodes, newNode];
+        const nextEdges = [...get().edges, newEdge];
+
+        const parentNodeObj = get().nodes.find(n => n.id === parentNodeId);
         const parentName = parentNodeObj?.data.label || 'Tarefa';
 
         const newLog: LogEntry = {
